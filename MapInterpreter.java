@@ -21,10 +21,10 @@ public class MapInterpreter {
 	public int fullMapSizeZ;
 
 	private static int CHUNK_SIZE = 5;
-	private static int SLIM_OFFSET_MIN = 3;
-	private static int SLIM_OFFSET_MAX = 1;
-	private static int WIDE_OFFSET_MIN = 4;
-	private static int WIDE_OFFSET_MAX = 0;
+	private static double SLIM_OFFSET_MIN = 2.5;
+	private static double SLIM_OFFSET_MAX = 1.5;
+	private static double WIDE_OFFSET_MIN = 4;
+	private static double WIDE_OFFSET_MAX = 0;
 
 	public static void main(String[] args) throws Exception {
 		new MapInterpreter().getRoadNetwork();
@@ -206,7 +206,7 @@ public class MapInterpreter {
 		return response;
 	}
 
-	private int getIndexOfCoord(List<Coord> coords, int x, int y, int xOffset, int yOffset, int wideOffsetX, int wideOffsetY, int slimOffsetX, int slimOffsetY) {
+	private int getIndexOfCoord(List<Coord> coords, double x, double y, double xOffset, double yOffset, double wideOffsetX, double wideOffsetY, double slimOffsetX, double slimOffsetY) {
 		for (int i = -1; i <= 1; i++) {
 			for (int j = -1; j <= 1; j++) {
 				int insideWide = coords.indexOf(new Coord(

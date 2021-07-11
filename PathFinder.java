@@ -115,7 +115,7 @@ public class PathFinder {
 	}
 
 	private int distanceBetween(Coord start, Coord end, RoadNetwork roads) {
-		double minDist = Math.sqrt((start.x-end.x)*(start.x-end.x) + (start.y-end.y)*(start.y-end.y));
+		double minDist = Math.sqrt((start.getX()-end.getX())*(start.getX()-end.getX()) + (start.getY()-end.getY())*(start.getY()-end.getY()));
 
 		List<Coord> toTests = Arrays.asList(
 			new Coord(start.x+roads.getMapX(), start.y),

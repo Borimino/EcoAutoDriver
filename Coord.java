@@ -1,10 +1,18 @@
 public class Coord {
-	public int x;
-	public int y;
+	public double x;
+	public double y;
 
-	public Coord(int x, int y) {
+	public Coord(double x, double y) {
 		this.x = x;
 		this.y = y;
+	}
+
+	public double getX() {
+		return x;
+	}
+
+	public double getY() {
+		return y;
 	}
 
 	public boolean equals(Object o) {
@@ -26,11 +34,10 @@ public class Coord {
 
 	public int hashCode() {
 		int hash = 7;
-		hash = 31 * hash + x;
-		hash = 31 * hash + y;
+		hash = 31 * hash + (int) x*1000;
+		hash = 31 * hash + (int) y*1000;
 		return hash;
 	}
-
 
 	public String toString() {
 		return "(" + x + ", " + y + ")";
