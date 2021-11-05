@@ -7,9 +7,10 @@ import java.nio.charset.StandardCharsets;
 
 public class MapInterpreter {
 	private static String binMapFileName = "binaryMap";
-	private static String baseUrl = "http://51.81.116.134:3081/";
-	private static String mapName = "Government Infrastructure";
-	private static String[] districtNames = {"Finished Roads", "Budgeted Roads", "Budgeted Stone Road"};
+	private static String baseUrl = "http://147.135.31.52:3081/";
+	private static String mapName = "Road Districts";
+	//private static String[] districtNames = {"Finished Roads", "Budgeted Roads", "Budgeted Stone Road"};
+	private static String[] districtNames = {"Finished Roads"};
 
 	private static String districtUrlExtension = "api/v1/laws/districtmap/";
 	private static String sizeUrlExtension = "api/v1/map/dimension/";
@@ -101,6 +102,16 @@ public class MapInterpreter {
 
 		List<Rect> oldRectMap = rectMap;
 		List<Rect> newRectMap = new ArrayList<>();
+
+		boolean edgeMergeHappened = true;
+		while (edgeMergeHappened) {
+			newRectMap = edgeMergeRects(oldRectMap);
+			edgeMergeHappened = !(oldRectMap.equals(newRectMap));
+			oldRectMap = newRectMap;
+		}
+
+		//drawRectMap(newRectMap);
+
 		int splitCount = 0;
 		boolean splitHappened = true;
 		while (splitHappened) {
@@ -405,6 +416,47 @@ public class MapInterpreter {
 		return new ArrayList<>(coords);
 	}
 
+	private List<Rect> edgeMergeRects(List<Rect> oldRectMap) {
+		List<Rect> newRectMap = new ArrayList<>(oldRectMap);
+		for (Rect rect1 : oldRectMap) {
+			for (Rect rect2 : oldRectMap) {
+				if (rect1.min_y == rect2.min_y && rect1.max_y == rect2.max_y) {
+					if (rect1.min_x == 0 && rect2.max_x == mapSizeX-1
+							&& rect1.max_x <= 1 && rect2.min_x >= mapSizeX-2) {
+						newRectMap.remove(rect1);
+						newRectMap.remove(rect2);
+						newRectMap.add(new Rect(rect2.min_x-mapSizeX, rect1.min_y, rect1.max_x, rect1.max_y, this));
+						return newRectMap;
+					}
+					if (rect2.min_x == 0 && rect1.max_x == mapSizeX-1
+							&& rect2.max_x <= 1 && rect1.min_x >= mapSizeX-2) {
+						newRectMap.remove(rect1);
+						newRectMap.remove(rect2);
+						newRectMap.add(new Rect(rect1.min_x-mapSizeX, rect1.min_y, rect2.max_x, rect1.max_y, this));
+						return newRectMap;
+					}
+				}
+				if (rect1.min_x == rect2.min_x && rect1.max_x == rect2.max_x) {
+					if (rect1.min_y == 0 && rect2.max_y == mapSizeZ-1
+							&& rect1.max_y <= 1 && rect2.min_y >= mapSizeZ-2) {
+						newRectMap.remove(rect1);
+						newRectMap.remove(rect2);
+						newRectMap.add(new Rect(rect1.min_x, rect2.min_y-mapSizeZ, rect1.max_x, rect1.max_y, this));
+						return newRectMap;
+					}
+					if (rect2.min_y == 0 && rect1.max_y == mapSizeZ-1
+							&& rect2.max_y <= 1 && rect1.min_y >= mapSizeZ-2) {
+						newRectMap.remove(rect1);
+						newRectMap.remove(rect2);
+						newRectMap.add(new Rect(rect1.min_x, rect1.min_y-mapSizeZ, rect1.max_x, rect2.max_y, this));
+						return newRectMap;
+					}
+				}
+			}
+		}
+		return newRectMap;
+	}
+
 	private List<Rect> longSplitRects(List<Rect> oldRectMap) {
 		List<Rect> newRectMap = new ArrayList<>(oldRectMap);
 		// For every rect, check if another rect is adjecent to the north or south
@@ -434,33 +486,64 @@ public class MapInterpreter {
 			for (Rect rect2 : oldRectMap) {
 				if (rect1.adjecentToNorth(rect2) || rect1.adjecentToSouth(rect2)) {
 					if (rect1.max_x == rect2.max_x && rect1.min_x == rect2.min_x) {
-							//rect1.max_x - rect1.min_x >= Math.max(rect1.max_y, rect2.max_y) - Math.min(rect1.min_y, rect2.min_y)) {
 						for (Rect rect3 : oldRectMap) {
 							if (rect1.adjecentToEast(rect3)) {
+								// If we find 1 rect east of rect1, then check if there is a rect east of rect2. If there is not, then don't merge
+								// Also check if there are rects west of rect1 and rect2. If there are rects west of BOTH or NEITHER, then merge, otherwise don't
 								for (Rect rect4 : oldRectMap) {
 									if (rect2.adjecentToEast(rect4)) {
-										if ((Math.min(rect1.min_y, rect2.min_y) == Math.min(rect3.min_y, rect4.min_y)) && // If the minimum of the two rects to consider is the minimum of the one/two rects to compare to
-											(Math.max(rect1.max_y, rect2.max_y) == Math.max(rect3.max_y, rect4.max_y)) && // If the maximum of the two rects to consider is the maximum of the one/two rects to compare to
-											(Math.max(rect3.min_y, rect4.min_y) <= Math.min(rect3.max_y, rect4.max_y) + 1) && // If the one/two rects to compare to is continuous
-											(Math.max(Math.max(rect1.max_x, rect2.max_x), Math.max(rect3.max_x, rect4.max_x)) - Math.min(Math.min(rect1.min_x, rect2.min_x), Math.min(rect3.min_x, rect4.min_x)) >= Math.max(Math.max(rect1.max_y, rect2.max_y), Math.max(rect3.max_y, rect4.max_y)) - Math.min(Math.min(rect1.min_y, rect2.min_y), Math.min(rect3.min_y, rect4.min_y)))) {
-											newRectMap.remove(rect1);
-											newRectMap.remove(rect2);
-											newRectMap.add(new Rect(rect1.min_x, Math.min(rect1.min_y, rect2.min_y), rect1.max_x, Math.max(rect1.max_y, rect2.max_y), this));
-											return newRectMap;
+										Rect rect5 = null;
+										for (Rect rect5tmp : oldRectMap) {
+											if (rect1.adjecentToWest(rect5tmp)) {
+												rect5 = rect5tmp;
+											}
+										}
+										Rect rect6 = null;
+										for (Rect rect6tmp : oldRectMap) {
+											if (rect2.adjecentToWest(rect6tmp)) {
+												rect6 = rect6tmp;
+											}
+										}
+										if ((rect5 != null && rect6 != null) || (rect5 == null && rect6 == null)) {
+											if ((Math.min(rect1.min_y, rect2.min_y) == Math.min(rect3.min_y, rect4.min_y)) && // If the minimum of the two rects to consider is the minimum of the one/two rects to compare to
+												(Math.max(rect1.max_y, rect2.max_y) == Math.max(rect3.max_y, rect4.max_y)) && // If the maximum of the two rects to consider is the maximum of the one/two rects to compare to
+												(Math.max(rect3.min_y, rect4.min_y) <= Math.min(rect3.max_y, rect4.max_y) + 1) && // If the one/two rects to compare to is continuous
+												(Math.max(Math.max(rect1.max_x, rect2.max_x), Math.max(rect3.max_x, rect4.max_x)) - Math.min(Math.min(rect1.min_x, rect2.min_x), Math.min(rect3.min_x, rect4.min_x)) >= Math.max(Math.max(rect1.max_y, rect2.max_y), Math.max(rect3.max_y, rect4.max_y)) - Math.min(Math.min(rect1.min_y, rect2.min_y), Math.min(rect3.min_y, rect4.min_y)))) {
+												newRectMap.remove(rect1);
+												newRectMap.remove(rect2);
+												newRectMap.add(new Rect(rect1.min_x, Math.min(rect1.min_y, rect2.min_y), rect1.max_x, Math.max(rect1.max_y, rect2.max_y), this));
+												return newRectMap;
+											}
 										}
 									}
 								}
 							} else if (rect1.adjecentToWest(rect3)) {
+								// If we find 1 rect west of rect1, then check if there is a rect west of rect2. If there is not, then don't merge
+								// Also check if there are rects east of rect1 and rect2. If there are rects east of BOTH or NEITHER, then merge, otherwise don't
 								for (Rect rect4 : oldRectMap) {
 									if (rect2.adjecentToWest(rect4)) {
-										if ((Math.min(rect1.min_y, rect2.min_y) == Math.min(rect3.min_y, rect4.min_y)) && // If the minimum of the two rects to consider is the minimum of the one/two rects to compare to
-											(Math.max(rect1.max_y, rect2.max_y) == Math.max(rect3.max_y, rect4.max_y)) && // If the maximum of the two rects to consider is the maximum of the one/two rects to compare to
-											(Math.max(rect3.min_y, rect4.min_y) <= Math.min(rect3.max_y, rect4.max_y) + 1) && // If the one/two rects to compare to is continuous
-											(Math.max(Math.max(rect1.max_x, rect2.max_x), Math.max(rect3.max_x, rect4.max_x)) - Math.min(Math.min(rect1.min_x, rect2.min_x), Math.min(rect3.min_x, rect4.min_x)) >= Math.max(Math.max(rect1.max_y, rect2.max_y), Math.max(rect3.max_y, rect4.max_y)) - Math.min(Math.min(rect1.min_y, rect2.min_y), Math.min(rect3.min_y, rect4.min_y)))) {
-											newRectMap.remove(rect1);
-											newRectMap.remove(rect2);
-											newRectMap.add(new Rect(rect1.min_x, Math.min(rect1.min_y, rect2.min_y), rect1.max_x, Math.max(rect1.max_y, rect2.max_y), this));
-											return newRectMap;
+										Rect rect5 = null;
+										for (Rect rect5tmp : oldRectMap) {
+											if (rect1.adjecentToEast(rect5tmp)) {
+												rect5 = rect5tmp;
+											}
+										}
+										Rect rect6 = null;
+										for (Rect rect6tmp : oldRectMap) {
+											if (rect2.adjecentToEast(rect6tmp)) {
+												rect6 = rect6tmp;
+											}
+										}
+										if ((rect5 != null && rect6 != null) || (rect5 == null && rect6 == null)) {
+											if ((Math.min(rect1.min_y, rect2.min_y) == Math.min(rect3.min_y, rect4.min_y)) && // If the minimum of the two rects to consider is the minimum of the one/two rects to compare to
+												(Math.max(rect1.max_y, rect2.max_y) == Math.max(rect3.max_y, rect4.max_y)) && // If the maximum of the two rects to consider is the maximum of the one/two rects to compare to
+												(Math.max(rect3.min_y, rect4.min_y) <= Math.min(rect3.max_y, rect4.max_y) + 1) && // If the one/two rects to compare to is continuous
+												(Math.max(Math.max(rect1.max_x, rect2.max_x), Math.max(rect3.max_x, rect4.max_x)) - Math.min(Math.min(rect1.min_x, rect2.min_x), Math.min(rect3.min_x, rect4.min_x)) >= Math.max(Math.max(rect1.max_y, rect2.max_y), Math.max(rect3.max_y, rect4.max_y)) - Math.min(Math.min(rect1.min_y, rect2.min_y), Math.min(rect3.min_y, rect4.min_y)))) {
+												newRectMap.remove(rect1);
+												newRectMap.remove(rect2);
+												newRectMap.add(new Rect(rect1.min_x, Math.min(rect1.min_y, rect2.min_y), rect1.max_x, Math.max(rect1.max_y, rect2.max_y), this));
+												return newRectMap;
+											}
 										}
 									}
 								}
@@ -470,33 +553,64 @@ public class MapInterpreter {
 				}
 				if (rect1.adjecentToEast(rect2) || rect1.adjecentToWest(rect2)) {
 					if (rect1.max_y == rect2.max_y && rect1.min_y == rect2.min_y) {
-							//rect1.max_y - rect1.min_y >= Math.max(rect1.max_x, rect2.max_x) - Math.min(rect1.min_x, rect2.min_x)) {
 						for (Rect rect3 : oldRectMap) {
 							if (rect1.adjecentToSouth(rect3)) {
+								// If we find 1 rect south of rect1, then check if there is a rect south of rect2. If there is not, then don't merge
+								// Also check if there are rects north of rect1 and rect2. If there are rects north of BOTH or NEITHER, then merge, otherwise don't
 								for (Rect rect4 : oldRectMap) {
 									if (rect2.adjecentToSouth(rect4)) {
-										if ((Math.min(rect1.min_x, rect2.min_x) == Math.min(rect3.min_x, rect4.min_x)) && // If the minimum of the two rects to consider is the minimum of the one/two rects to compare to
-											(Math.max(rect1.max_x, rect2.max_x) == Math.max(rect3.max_x, rect4.max_x)) && // If the maximum of the two rects to consider is the maximum of the one/two rects to compare to
-											(Math.max(rect3.min_x, rect4.min_x) <= Math.min(rect3.max_x, rect4.max_x) + 1) && // If the one/two rects to compare to is continuous
-											(Math.max(Math.max(rect1.max_x, rect2.max_x), Math.max(rect3.max_x, rect4.max_x)) - Math.min(Math.min(rect1.min_x, rect2.min_x), Math.min(rect3.min_x, rect4.min_x)) <= Math.max(Math.max(rect1.max_y, rect2.max_y), Math.max(rect3.max_y, rect4.max_y)) - Math.min(Math.min(rect1.min_y, rect2.min_y), Math.min(rect3.min_y, rect4.min_y)))) {
-											newRectMap.remove(rect1);
-											newRectMap.remove(rect2);
-											newRectMap.add(new Rect(Math.min(rect1.min_x, rect2.min_x), rect1.min_y, Math.max(rect1.max_x, rect2.max_x), rect1.max_y, this));
-											return newRectMap;
+										Rect rect5 = null;
+										for (Rect rect5tmp : oldRectMap) {
+											if (rect1.adjecentToNorth(rect5tmp)) {
+												rect5 = rect5tmp;
+											}
+										}
+										Rect rect6 = null;
+										for (Rect rect6tmp : oldRectMap) {
+											if (rect2.adjecentToNorth(rect6tmp)) {
+												rect6 = rect6tmp;
+											}
+										}
+										if ((rect5 != null && rect6 != null) || (rect5 == null && rect6 == null)) {
+											if ((Math.min(rect1.min_x, rect2.min_x) == Math.min(rect3.min_x, rect4.min_x)) && // If the minimum of the two rects to consider is the minimum of the one/two rects to compare to
+												(Math.max(rect1.max_x, rect2.max_x) == Math.max(rect3.max_x, rect4.max_x)) && // If the maximum of the two rects to consider is the maximum of the one/two rects to compare to
+												(Math.max(rect3.min_x, rect4.min_x) <= Math.min(rect3.max_x, rect4.max_x) + 1) && // If the one/two rects to compare to is continuous
+												(Math.max(Math.max(rect1.max_x, rect2.max_x), Math.max(rect3.max_x, rect4.max_x)) - Math.min(Math.min(rect1.min_x, rect2.min_x), Math.min(rect3.min_x, rect4.min_x)) <= Math.max(Math.max(rect1.max_y, rect2.max_y), Math.max(rect3.max_y, rect4.max_y)) - Math.min(Math.min(rect1.min_y, rect2.min_y), Math.min(rect3.min_y, rect4.min_y)))) {
+												newRectMap.remove(rect1);
+												newRectMap.remove(rect2);
+												newRectMap.add(new Rect(Math.min(rect1.min_x, rect2.min_x), rect1.min_y, Math.max(rect1.max_x, rect2.max_x), rect1.max_y, this));
+												return newRectMap;
+											}
 										}
 									}
 								}
 							} else if (rect1.adjecentToNorth(rect3)) {
+								// If we find 1 rect north of rect1, then check if there is a rect north of rect2. If there is not, then don't merge
+								// Also check if there are rects south of rect1 and rect2. If there are rects south of BOTH or NEITHER, then merge, otherwise don't
 								for (Rect rect4 : oldRectMap) {
 									if (rect2.adjecentToNorth(rect4)) {
-										if ((Math.min(rect1.min_x, rect2.min_x) == Math.min(rect3.min_x, rect4.min_x)) && // If the minimum of the two rects to consider is the minimum of the one/two rects to compare to
-											(Math.max(rect1.max_x, rect2.max_x) == Math.max(rect3.max_x, rect4.max_x)) && // If the maximum of the two rects to consider is the maximum of the one/two rects to compare to
-											(Math.max(rect3.min_x, rect4.min_x) <= Math.min(rect3.max_x, rect4.max_x) + 1) && // If the one/two rects to compare to is continuous
-											(Math.max(Math.max(rect1.max_x, rect2.max_x), Math.max(rect3.max_x, rect4.max_x)) - Math.min(Math.min(rect1.min_x, rect2.min_x), Math.min(rect3.min_x, rect4.min_x)) <= Math.max(Math.max(rect1.max_y, rect2.max_y), Math.max(rect3.max_y, rect4.max_y)) - Math.min(Math.min(rect1.min_y, rect2.min_y), Math.min(rect3.min_y, rect4.min_y)))) {
-											newRectMap.remove(rect1);
-											newRectMap.remove(rect2);
-											newRectMap.add(new Rect(Math.min(rect1.min_x, rect2.min_x), rect1.min_y, Math.max(rect1.max_x, rect2.max_x), rect1.max_y, this));
-											return newRectMap;
+										Rect rect5 = null;
+										for (Rect rect5tmp : oldRectMap) {
+											if (rect1.adjecentToSouth(rect5tmp)) {
+												rect5 = rect5tmp;
+											}
+										}
+										Rect rect6 = null;
+										for (Rect rect6tmp : oldRectMap) {
+											if (rect2.adjecentToSouth(rect6tmp)) {
+												rect6 = rect6tmp;
+											}
+										}
+										if ((rect5 != null && rect6 != null) || (rect5 == null && rect6 == null)) {
+											if ((Math.min(rect1.min_x, rect2.min_x) == Math.min(rect3.min_x, rect4.min_x)) && // If the minimum of the two rects to consider is the minimum of the one/two rects to compare to
+												(Math.max(rect1.max_x, rect2.max_x) == Math.max(rect3.max_x, rect4.max_x)) && // If the maximum of the two rects to consider is the maximum of the one/two rects to compare to
+												(Math.max(rect3.min_x, rect4.min_x) <= Math.min(rect3.max_x, rect4.max_x) + 1) && // If the one/two rects to compare to is continuous
+												(Math.max(Math.max(rect1.max_x, rect2.max_x), Math.max(rect3.max_x, rect4.max_x)) - Math.min(Math.min(rect1.min_x, rect2.min_x), Math.min(rect3.min_x, rect4.min_x)) <= Math.max(Math.max(rect1.max_y, rect2.max_y), Math.max(rect3.max_y, rect4.max_y)) - Math.min(Math.min(rect1.min_y, rect2.min_y), Math.min(rect3.min_y, rect4.min_y)))) {
+												newRectMap.remove(rect1);
+												newRectMap.remove(rect2);
+												newRectMap.add(new Rect(Math.min(rect1.min_x, rect2.min_x), rect1.min_y, Math.max(rect1.max_x, rect2.max_x), rect1.max_y, this));
+												return newRectMap;
+											}
 										}
 									}
 								}
@@ -518,7 +632,7 @@ public class MapInterpreter {
 		for (Rect rect1 : oldRectMap) {
 			for (Rect rect2 : oldRectMap) {
 				if (rect1.adjecentToNorth(rect2) || rect1.adjecentToSouth(rect2)) {
-					if (rect1.min_x < rect2.min_x && rect1.max_x > rect2.min_x) {
+					if (rect1.min_x < rect2.min_x) {
 						if (rect1.max_x > rect2.max_x) {
 							//System.out.println("TEST1");
 
@@ -548,34 +662,6 @@ public class MapInterpreter {
 							newRectMap.add(new Rect(rect2.min_x, rect1.min_y, rect1.max_x, rect1.max_y, this));
 							return newRectMap;
 						}
-					} else if (rect1.min_x > rect2.min_x && rect2.max_x > rect1.min_x) {
-						if (rect1.max_x < rect2.max_x) {
-							//System.out.println("TEST4");
-							// 2x 1x 1x 2x
-							newRectMap.remove(rect2);
-							newRectMap.add(new Rect(rect2.min_x, rect2.min_y, rect1.min_x-1, rect2.max_y, this));
-							newRectMap.add(new Rect(rect1.min_x, rect2.min_y, rect1.max_x, rect2.max_y, this));
-							newRectMap.add(new Rect(rect1.max_x+1, rect2.min_y, rect2.max_x, rect2.max_y, this));
-							return newRectMap;
-						} else if (rect1.max_x > rect2.max_x) {
-							//System.out.println("TEST5");
-							// 2x 1x 2x 1x
-							newRectMap.remove(rect2);
-							newRectMap.add(new Rect(rect2.min_x, rect2.min_y, rect1.min_x-1, rect2.max_y, this));
-							newRectMap.add(new Rect(rect1.min_x, rect2.min_y, rect2.max_x, rect2.max_y, this));
-
-							newRectMap.remove(rect1);
-							newRectMap.add(new Rect(rect1.min_x, rect1.min_y, rect2.max_x, rect1.max_y, this));
-							newRectMap.add(new Rect(rect2.max_x+1, rect1.min_y, rect1.max_x, rect1.max_y, this));
-							return newRectMap;
-						} else if (rect1.max_x == rect2.max_x) {
-							//System.out.println("TEST6");
-							// 2x 1x 21x
-							newRectMap.remove(rect2);
-							newRectMap.add(new Rect(rect2.min_x, rect2.min_y, rect1.min_x-1, rect2.max_y, this));
-							newRectMap.add(new Rect(rect1.min_x, rect2.min_y, rect2.max_x, rect2.max_y, this));
-							return newRectMap;
-						}
 					} else if (rect1.min_x == rect2.min_x) {
 						if (rect1.max_x < rect2.max_x) {
 							//System.out.println("TEST7");
@@ -600,7 +686,7 @@ public class MapInterpreter {
 					}
 				}
 				if (rect1.adjecentToEast(rect2) || rect1.adjecentToWest(rect2)) {
-					if (rect1.min_y < rect2.min_y && rect1.max_y > rect2.min_y) {
+					if (rect1.min_y < rect2.min_y) {
 						if (rect1.max_y > rect2.max_y) {
 							//System.out.println("TEST10");
 							// 1y 2y 2y 1y
@@ -626,34 +712,6 @@ public class MapInterpreter {
 							newRectMap.remove(rect1);
 							newRectMap.add(new Rect(rect1.min_x, rect1.min_y, rect1.max_x, rect2.min_y-1, this));
 							newRectMap.add(new Rect(rect1.min_x, rect2.min_y, rect1.max_x, rect1.max_y, this));
-							return newRectMap;
-						}
-					} else if (rect1.min_y > rect2.min_y && rect2.max_y > rect1.min_y) {
-						if (rect1.max_y < rect2.max_y) {
-							//System.out.println("TEST13");
-							// 2y 1y 1y 2y
-							newRectMap.remove(rect2);
-							newRectMap.add(new Rect(rect2.min_x, rect2.min_y, rect2.max_x, rect1.min_y-1, this));
-							newRectMap.add(new Rect(rect2.min_x, rect1.min_y, rect2.max_x, rect1.max_y, this));
-							newRectMap.add(new Rect(rect2.min_x, rect1.max_y+1, rect2.max_x, rect2.max_y, this));
-							return newRectMap;
-						} else if (rect1.max_y > rect2.max_y) {
-							//System.out.println("TEST14");
-							// 2y 1y 2y 1y
-							newRectMap.remove(rect2);
-							newRectMap.add(new Rect(rect2.min_x, rect2.min_y, rect2.max_x, rect1.min_y-1, this));
-							newRectMap.add(new Rect(rect2.min_x, rect1.min_y, rect2.max_x, rect2.max_y, this));
-
-							newRectMap.remove(rect1);
-							newRectMap.add(new Rect(rect1.min_x, rect1.min_y, rect1.max_x, rect2.max_y, this));
-							newRectMap.add(new Rect(rect1.min_x, rect2.max_y+1, rect1.max_x, rect1.max_y, this));
-							return newRectMap;
-						} else if (rect1.max_y == rect2.max_y) {
-							//System.out.println("TEST15");
-							// 2y 1y 21y
-							newRectMap.remove(rect2);
-							newRectMap.add(new Rect(rect2.min_x, rect2.min_y, rect2.max_x, rect1.min_y-1, this));
-							newRectMap.add(new Rect(rect2.min_x, rect1.min_y, rect2.max_x, rect2.max_y, this));
 							return newRectMap;
 						}
 					} else if (rect1.min_y == rect2.min_y) {
@@ -754,16 +812,18 @@ public class MapInterpreter {
 		public int min_y;
 		public int max_x;
 		public int max_y;
+		MapInterpreter mapInterpreter;
 
 		public Rect(int min_x, int min_y, int max_x, int max_y, MapInterpreter mapInterpreter) {
-			this.min_x = min_x % mapInterpreter.mapSizeX;
-			this.min_y = min_y % mapInterpreter.mapSizeZ;
-			this.max_x = max_x % mapInterpreter.mapSizeX;
-			this.max_y = max_y % mapInterpreter.mapSizeZ;
+			this.min_x = min_x;
+			this.min_y = min_y;
+			this.max_x = max_x;
+			this.max_y = max_y;
 			if (min_y > max_y || min_x > max_x) {
 				System.out.println("ILLEGAL RECT");
 				System.out.println(this);
 			}
+			this.mapInterpreter = mapInterpreter;
 		}
 
 		public boolean adjecentToNorth(Rect other) {
@@ -773,7 +833,7 @@ public class MapInterpreter {
 			if (this.max_x < other.min_x) {
 				return false;
 			}
-			return other.min_y == this.max_y + 1;
+			return other.min_y == (this.max_y + 1 + mapInterpreter.mapSizeZ) % mapInterpreter.mapSizeZ;
 		}
 
 		public boolean adjecentToSouth(Rect other) {
@@ -783,7 +843,7 @@ public class MapInterpreter {
 			if (this.max_x < other.min_x) {
 				return false;
 			}
-			return other.max_y == this.min_y - 1;
+			return other.max_y == (this.min_y - 1 + mapInterpreter.mapSizeZ) % mapInterpreter.mapSizeZ;
 		}
 
 		public boolean adjecentToEast(Rect other) {
@@ -793,7 +853,7 @@ public class MapInterpreter {
 			if (this.max_y < other.min_y) {
 				return false;
 			}
-			return other.min_x == this.max_x + 1;
+			return other.min_x == (this.max_x + 1 + mapInterpreter.mapSizeX) % mapInterpreter.mapSizeX;
 		}
 
 		public boolean adjecentToWest(Rect other) {
@@ -803,7 +863,7 @@ public class MapInterpreter {
 			if (this.max_y < other.min_y) {
 				return false;
 			}
-			return other.max_x == this.min_x - 1;
+			return other.max_x == (this.min_x - 1 + mapInterpreter.mapSizeX) % mapInterpreter.mapSizeX;
 		}
 
 		public boolean equals(Object o) {
@@ -851,18 +911,29 @@ public class MapInterpreter {
 				boolean foundOne = false;
 				int amountFound = 0;
 				for (Rect rect : rectMap) {
-					if (rect.min_x*factor < x && rect.max_x*factor+factor > x && (rect.min_y*factor == y || rect.max_y*factor+factor == y)) {
-						//System.out.print("|");
-						foundOne = true;
-						amountFound += 1;
-					} else if (rect.min_y*factor < y && rect.max_y*factor+factor > y && (rect.min_x*factor == x || rect.max_x*factor+factor == x)) {
+					//if (rect.min_x*factor < x && rect.max_x*factor+factor > x && (rect.min_y*factor == y || rect.max_y*factor+factor == y)) {
+					if (((rect.min_x*factor <= x && rect.max_x*factor+factor >= x) || 
+								((rect.min_x+mapSizeX)*factor <= x && (rect.max_x+mapSizeX)*factor+factor >= x) || 
+								((rect.min_x-mapSizeX)*factor <= x && (rect.max_x-mapSizeX)*factor+factor >= x)) && 
+							(rect.min_y*factor == y || rect.max_y*factor+factor == y 
+							 || (rect.min_y+mapSizeZ)*factor == y || (rect.max_y+mapSizeZ)*factor+factor == y 
+							 || (rect.min_y-mapSizeZ)*factor == y || (rect.max_y-mapSizeZ)*factor+factor == y)) {
 						//System.out.print("-");
 						foundOne = true;
 						amountFound += 1;
-					} else if ((rect.min_x*factor == x || rect.max_x*factor+factor == x) && (rect.min_y*factor == y || rect.max_y*factor+factor == y)) {
-						//System.out.print("+");
+					} else if (((rect.min_y*factor <= y && rect.max_y*factor+factor >= y) || 
+								((rect.min_y+mapSizeZ)*factor <= y && (rect.max_y+mapSizeZ)*factor+factor >= y) || 
+								((rect.min_y-mapSizeZ)*factor <= y && (rect.max_y-mapSizeZ)*factor+factor >= y)) && 
+							(rect.min_x*factor == x || rect.max_x*factor+factor == x 
+							 || (rect.min_x+mapSizeX)*factor == x || (rect.max_x+mapSizeX)*factor+factor == x 
+							 || (rect.min_x-mapSizeX)*factor == x || (rect.max_x-mapSizeX)*factor+factor == x)) {
+						//System.out.print("|");
 						foundOne = true;
 						amountFound += 1;
+					//} else if ((rect.min_x*factor == x || rect.max_x*factor+factor == x) && (rect.min_y*factor == y || rect.max_y*factor+factor == y)) {
+						////System.out.print("+");
+						//foundOne = true;
+						//amountFound += 1;
 					}
 				}
 				if (foundOne == false) {
@@ -870,7 +941,6 @@ public class MapInterpreter {
 				} else {
 					System.out.print(amountFound);
 				}
-
 			}
 			System.out.println();
 		}

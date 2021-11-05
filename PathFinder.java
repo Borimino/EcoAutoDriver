@@ -16,29 +16,21 @@ public class PathFinder {
 	}
 
 	public List<Route> findPaths(Coord start, Coord end, RoadNetwork roads) {
-		List<Coord> nearestStart = findNearest(start, roads);
-		List<Coord> nearestEnd = findNearest(end, roads);
+		List<Coord> nearestStart = findNearest(start, roads).subList(0, 6);
+		List<Coord> nearestEnd = findNearest(end, roads).subList(0, 6);
 
 		List<Route> routes = new ArrayList<Route>();
 
-		routes.add(findPath(nearestStart.get(0), nearestEnd.get(0), roads));
-		routes.add(findPath(nearestStart.get(0), nearestEnd.get(1), roads));
-		routes.add(findPath(nearestStart.get(0), nearestEnd.get(2), roads));
-		routes.add(findPath(nearestStart.get(0), nearestEnd.get(3), roads));
-		routes.add(findPath(nearestStart.get(1), nearestEnd.get(0), roads));
-		routes.add(findPath(nearestStart.get(1), nearestEnd.get(1), roads));
-		routes.add(findPath(nearestStart.get(1), nearestEnd.get(2), roads));
-		routes.add(findPath(nearestStart.get(1), nearestEnd.get(3), roads));
-		routes.add(findPath(nearestStart.get(2), nearestEnd.get(0), roads));
-		routes.add(findPath(nearestStart.get(2), nearestEnd.get(1), roads));
-		routes.add(findPath(nearestStart.get(2), nearestEnd.get(2), roads));
-		routes.add(findPath(nearestStart.get(2), nearestEnd.get(3), roads));
-		routes.add(findPath(nearestStart.get(3), nearestEnd.get(0), roads));
-		routes.add(findPath(nearestStart.get(3), nearestEnd.get(1), roads));
-		routes.add(findPath(nearestStart.get(3), nearestEnd.get(2), roads));
-		routes.add(findPath(nearestStart.get(3), nearestEnd.get(3), roads));
+		for (Coord nearStart : nearestStart) {
+			for (Coord nearEnd : nearestEnd) {
+				routes.add(findPath(nearStart, nearEnd, roads));
+			}
+		}
 
 		routes.removeIf(r -> r.path == null);
+
+		routes.removeIf(r -> nearestStart.contains(r.path.get(1))); //Don't include routes that are just another route with 1 more tacked on
+		routes.removeIf(r -> nearestEnd.contains(r.path.get(r.path.size()-2))); //Don't include routes that are just another route with 1 more tacked on
 
 		routes.sort((r1, r2) -> {return r1.fScore - r2.fScore;});
 		

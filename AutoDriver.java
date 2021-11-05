@@ -11,9 +11,11 @@ import com.sun.jna.ptr.*;
 
 public class AutoDriver {
 
-	private static final double GOAL_DISTANCE = 5f;
-	private static final double PRETTY_STRAIGHT_ANGLE = Math.PI/48f;
-	private static final double SLEEP_MODIFIER = 64;
+	private static final double GOAL_DISTANCE = 4.5f;
+	private static final double PRETTY_STRAIGHT_ANGLE = Math.PI/64f;
+	private static final double SHARP_TURN_ANGLE = Math.PI/4f;
+	private static final double LOW_SPEED = 3f;
+	//private static final double SLEEP_MODIFIER = 16;
 
 	private static int MAX_X;
 	private static int MAX_Y;
@@ -105,7 +107,7 @@ public class AutoDriver {
 		Pointer modulePointer = modules.stream().filter(m -> m.szModule().equals("GameAssembly.dll")).findFirst().map(m -> m.modBaseAddr).get();
 
 		Pointer address = modulePointer;
-		Long[] offsets = new Long[] {(long) 0x035FE050, (long) 0xB8, (long) 0x10, (long) 0x18, (long) 0x28};
+		Long[] offsets = new Long[] {(long) 0x036D5A70, (long) 0xB8, (long) 0x20};
 		for (Long offset : Arrays.asList(offsets)) {
 			int size = 8;
 			Pointer.nativeValue(address, Pointer.nativeValue(address) + offset);
@@ -114,7 +116,7 @@ public class AutoDriver {
 		}
 
 		int size = 4;
-		Pointer.nativeValue(address, Pointer.nativeValue(address) + 0x40);
+		Pointer.nativeValue(address, Pointer.nativeValue(address) + 0x200);
 		Memory read = readMemory(readProcess, address, size);
 		float x = read.getFloat(0);
 		Pointer.nativeValue(address, Pointer.nativeValue(address) + 0x8);
@@ -167,18 +169,22 @@ public class AutoDriver {
 	private static int driveTowards(DoubleCoord destination) throws InterruptedException, AWTException {
 		//int shouldPrintDebug = 0;
 		DoubleCoord previousCoord = null;
+		Long lastMillis = null;
 		while (true) {
 			//if (abortDriving || !run) {
 				//stopDriving();
 				//return 0;
 			//}
 
-			//TimeUnit.MILLISECONDS.sleep((long) 256);
+			TimeUnit.MILLISECONDS.sleep((long) 16);
 
 			DoubleCoord currentCoord = getPosition();
+			long currentMillis = System.currentTimeMillis();
 
-			if (previousCoord == null) {
+			if (previousCoord == null || lastMillis == null) {
 				previousCoord = currentCoord;
+				lastMillis = currentMillis;
+				continue;
 			}
 
 			previousCoord = maybeWrapCoordToGetNearCoord(previousCoord, currentCoord);
@@ -186,6 +192,7 @@ public class AutoDriver {
 
 			if (distanceBetween(tmpDestination, currentCoord) < GOAL_DISTANCE) {
 				stopDriving();
+				//TimeUnit.MILLISECONDS.sleep((long) 128);
 				return 0;
 			}
 
@@ -196,31 +203,53 @@ public class AutoDriver {
 			double dot = justTraveled.x*leftToTravel.x + justTraveled.y*leftToTravel.y;
 			double magnitude = Math.sqrt(justTraveled.x*justTraveled.x + justTraveled.y*justTraveled.y) * Math.sqrt(leftToTravel.x*leftToTravel.x + leftToTravel.y*leftToTravel.y);
 			double angle = Math.abs(Math.acos(dot/magnitude));
+			double distanceTraveled = Math.sqrt(justTraveled.x*justTraveled.x + justTraveled.y*justTraveled.y);
+			double timeTraveledMillis = (currentMillis - lastMillis);
+			double timeTraveledSeconds = timeTraveledMillis/1000;
+			double speed = distanceTraveled / timeTraveledSeconds;
 
 			if (magnitude >= 32) {
 				previousCoord = currentCoord;
+
+				System.out.println("TEST5");
 				continue;
 			}
 
-			if (magnitude <= 0) {
+			if (distanceTraveled <= 0) {
 				continue;
 			}
 
-			printDebugInfo(currentCoord, previousCoord, tmpDestination, perpendicularDot, dot, magnitude, angle, leftToTravel);
+			System.out.println("TEST4");
 
-			if (dot < 0 && magnitude >= 0.5) {
+
+			printDebugInfo(currentCoord, previousCoord, tmpDestination, perpendicularDot, dot, magnitude, angle, leftToTravel, distanceTraveled, speed, timeTraveledSeconds);
+
+			//if (dot < 0 && magnitude >= 0.5) {
+			if (dot <= -0.01) {
 				stopDriving();
 				return -1;
 			} else if (perpendicularDot == 0 || angle < PRETTY_STRAIGHT_ANGLE) {
 				driveForwards();
-			} else if (perpendicularDot > 0) {
-				turnRight();
-				TimeUnit.MILLISECONDS.sleep((long) (angle*SLEEP_MODIFIER));
+			} else if (angle < SHARP_TURN_ANGLE || speed < LOW_SPEED) {
+				if (perpendicularDot > 0) {
+					turnRight();
+					//TimeUnit.MILLISECONDS.sleep((long) (angle*SLEEP_MODIFIER));
+				} else {
+					turnLeft();
+					//TimeUnit.MILLISECONDS.sleep((long) (angle*SLEEP_MODIFIER));
+				}
 			} else {
-				turnLeft();
-				TimeUnit.MILLISECONDS.sleep((long) (angle*SLEEP_MODIFIER));
+				if (perpendicularDot > 0) {
+					turnRightSharp();
+					//TimeUnit.MILLISECONDS.sleep((long) (angle*SLEEP_MODIFIER));
+				} else {
+					turnLeftSharp();
+					//TimeUnit.MILLISECONDS.sleep((long) (angle*SLEEP_MODIFIER));
+				}
 			}
+
 			previousCoord = currentCoord;
+			lastMillis = currentMillis;
 		}
 	}
 
@@ -280,6 +309,22 @@ public class AutoDriver {
 		r.keyRelease(KeyEvent.VK_S);
 	}
 
+	private static void turnLeftSharp() throws AWTException{
+		Robot r = new Robot();
+		r.keyRelease(KeyEvent.VK_W);
+		r.keyPress(KeyEvent.VK_A);
+		r.keyRelease(KeyEvent.VK_D);
+		r.keyRelease(KeyEvent.VK_S);
+	}
+
+	private static void turnRightSharp() throws AWTException{
+		Robot r = new Robot();
+		r.keyRelease(KeyEvent.VK_W);
+		r.keyRelease(KeyEvent.VK_A);
+		r.keyPress(KeyEvent.VK_D);
+		r.keyRelease(KeyEvent.VK_S);
+	}
+
 	private static void stopDriving() throws AWTException{
 		Robot r = new Robot();
 		r.keyRelease(KeyEvent.VK_W);
@@ -308,8 +353,8 @@ public class AutoDriver {
 
 	}
 
-	private static void printDebugInfo(DoubleCoord currentCoord, DoubleCoord previousCoord, DoubleCoord destination, double perpendicularDot, double dot, double magnitude, double angle, DoubleCoord leftToTravel) {
-		debugLabel.setText("<html>Current coord: " + currentCoord + "<br />Previous coord: " + previousCoord + "<br />Destination: " + destination + "<br />Perp dot: " + String.format("%.2f", perpendicularDot) + "<br />Dot: " + String.format("%.2f", dot) + "<br />Magnitude: " + String.format("%.2f", magnitude) + "<br />Angle: " + String.format("%.2f", angle) + "<br />Left to travel: " + leftToTravel + "</html>");
+	private static void printDebugInfo(DoubleCoord currentCoord, DoubleCoord previousCoord, DoubleCoord destination, double perpendicularDot, double dot, double magnitude, double angle, DoubleCoord leftToTravel, double distanceTraveled, double speed, double timeTraveled) {
+		debugLabel.setText("<html>Current coord: " + currentCoord + "<br />Previous coord: " + previousCoord + "<br />Destination: " + destination + "<br />Perp dot: " + String.format("%.2f", perpendicularDot) + "<br />Dot: " + String.format("%.2f", dot) + "<br />Magnitude: " + String.format("%.2f", magnitude) + "<br />Angle: " + String.format("%.2f", angle) + "<br />Left to travel: " + leftToTravel + "<br />Distance traveled: " + String.format("%.2f", distanceTraveled) + "<br />Speed: " + String.format("%.2f", speed) + "<br />Time: " + String.format("%.2f", timeTraveled) + "</html>");
 
 		debugDialog.pack();
 		debugLabel.paintImmediately(debugLabel.getVisibleRect());
