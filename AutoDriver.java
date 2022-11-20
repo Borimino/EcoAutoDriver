@@ -107,7 +107,7 @@ public class AutoDriver {
 		Pointer modulePointer = modules.stream().filter(m -> m.szModule().equals("GameAssembly.dll")).findFirst().map(m -> m.modBaseAddr).get();
 
 		Pointer address = modulePointer;
-		Long[] offsets = new Long[] {(long) 0x036D5A70, (long) 0xB8, (long) 0x20};
+		Long[] offsets = new Long[] {(long) 0x04388858, (long) 0xB8, (long) 0x20};
 		for (Long offset : Arrays.asList(offsets)) {
 			int size = 8;
 			Pointer.nativeValue(address, Pointer.nativeValue(address) + offset);
@@ -116,7 +116,7 @@ public class AutoDriver {
 		}
 
 		int size = 4;
-		Pointer.nativeValue(address, Pointer.nativeValue(address) + 0x200);
+		Pointer.nativeValue(address, Pointer.nativeValue(address) + 0x270);
 		Memory read = readMemory(readProcess, address, size);
 		float x = read.getFloat(0);
 		Pointer.nativeValue(address, Pointer.nativeValue(address) + 0x8);

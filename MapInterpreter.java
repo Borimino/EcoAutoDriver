@@ -7,10 +7,9 @@ import java.nio.charset.StandardCharsets;
 
 public class MapInterpreter {
 	private static String binMapFileName = "binaryMap";
-	private static String baseUrl = "http://147.135.31.52:3081/";
-	private static String mapName = "Road Districts";
-	//private static String[] districtNames = {"Finished Roads", "Budgeted Roads", "Budgeted Stone Road"};
-	private static String[] districtNames = {"Finished Roads"};
+	private static String baseUrl = "http://dadspeedgames.com:3081/";
+	private static String[] mapNames = {"Petra Roads", "Amazonian Roads", "Olympus Roadmap", "Twin Peaks Roads Revision 2", "Federal Bridges"};
+	private static String[] districtNames = {"Petra Public Roads", "Petra Highway", "District 18", "Amazonian Finished Road", "Amazonian Budgeted Asphalt Road", "Amazonian Budgeted Modern Road", "Olympus Interstate", "Olympus Avenue", "Olympus Street", "Olympus Bridges", "District", "District 5", "District 6", "District 7", "TP Finished Roads", "TP Budgeted Asphalt Roads", "Federal Bridges"};
 
 	private static String districtUrlExtension = "api/v1/laws/districtmap/";
 	private static String sizeUrlExtension = "api/v1/map/dimension/";
@@ -24,72 +23,99 @@ public class MapInterpreter {
 	private static int CHUNK_SIZE = 5;
 	private static double SLIM_OFFSET_MIN = 2.5;
 	private static double SLIM_OFFSET_MAX = 1.5;
-	private static double WIDE_OFFSET_MIN = 4;
-	private static double WIDE_OFFSET_MAX = 0;
+	private static double WIDE_OFFSET_MIN = 3.5;
+	private static double WIDE_OFFSET_MAX = 0.5;
 
 	public static void main(String[] args) throws Exception {
 		new MapInterpreter().getRoadNetwork();
 	}
 
 	public RoadNetwork getRoadNetwork() throws Exception {
-		URL url = new URL(baseUrl + districtUrlExtension + URLEncoder.encode(mapName, StandardCharsets.UTF_8.toString()).replace("+", "%20"));
-		String response = getContentFromURL(url);
+		List<boolean[][]> binMaps = new ArrayList<>();
+		for (String mapName : mapNames) {
+			URL url = new URL(baseUrl + districtUrlExtension + URLEncoder.encode(mapName, StandardCharsets.UTF_8.toString()).replace("+", "%20"));
+			String response = getContentFromURL(url);
 
-		wantedDistricts = new int[districtNames.length];
-		for (int i = 0; i < districtNames.length; i++) { 
-			String districtName = districtNames[i];
-			Pattern pId = Pattern.compile(".*\"ID\":([^,]*),\"Name\":\"" + districtName + ".*");
-			Matcher mId = pId.matcher(response);
-			boolean bId = mId.matches();
-			wantedDistricts[i] = Integer.parseInt(mId.group(1));
+			// Get the IDs of the Districts within the Map
+			wantedDistricts = new int[districtNames.length];
+			for (int i = 0; i < districtNames.length; i++) { 
+				String districtName = districtNames[i];
+				Pattern pId = Pattern.compile(".*\"ID\":([^,]*),\"Name\":\"" + districtName + ".*");
+				Matcher mId = pId.matcher(response);
+				boolean bId = mId.matches();
+				if (bId) {
+					System.out.println("District fount: " + mapName + ", " + districtName);
+					wantedDistricts[i] = Integer.parseInt(mId.group(1));
+				} else {
+					wantedDistricts[i] = -1;
+				}
+			}
+			//System.out.println(wantedDistricts);
+
+			// Get the hex version of the Map
+			Pattern p = Pattern.compile(".*\"DistrictMap\":\"([^\"]*)\".*");
+			Matcher m = p.matcher(response);
+			boolean b = m.matches();
+			String b64 = m.group(1);
+			byte[] hexMap = Base64.getDecoder().decode(b64);
+			//System.out.println("Hex map length: " + hexMap.length);
+
+			URL url2 = new URL(baseUrl + sizeUrlExtension);
+			String response2 = getContentFromURL(url2);
+
+			// Get the dimensions of the Map
+			Pattern px = Pattern.compile(".*\"x\":([0-9]+).*");
+			Pattern pz = Pattern.compile(".*\"z\":([0-9]+).*");
+			Matcher mx = px.matcher(response2);
+			Matcher mz = pz.matcher(response2);
+			boolean bx = mx.matches();
+			boolean bz = mz.matches();
+			fullMapSizeX = Integer.parseInt(mx.group(1));
+			fullMapSizeZ = Integer.parseInt(mz.group(1));
+			mapSizeX = (int) fullMapSizeX/5;
+			mapSizeZ = (int) fullMapSizeZ/5;
+
+
+			// Build binary map of, whether a Wanted District is present within a point on the Map
+			boolean[][] binMap = new boolean[mapSizeX][mapSizeZ];
+			for (int z = 0; z < mapSizeZ; z++) {
+				for (int x = 0; x < mapSizeX; x++) {
+					int hexValue = (((int) hexMap[x + z*mapSizeX]) + 256) % 256;
+
+					//System.out.print(hexValue + " ");
+					for (int i = 0; i < wantedDistricts.length; i++) {
+						if (wantedDistricts[i] % 256 == hexValue) {
+							binMap[z][x] = true;
+							break;
+							//System.out.print("1");
+						} else {
+							binMap[z][x] = false;
+							//System.out.print("0");
+						}
+					}
+				}
+				//System.out.println();
+			}
+
+			//System.out.println("Bin map length: " + binMap.length);
+			//System.out.println("Bin map 0 length: " + binMap[0].length);
+			
+			binMaps.add(binMap);
 		}
-		//System.out.println(wantedDistricts);
-
-		Pattern p = Pattern.compile(".*\"DistrictMap\":\"([^\"]*)\".*");
-		Matcher m = p.matcher(response);
-		boolean b = m.matches();
-		String b64 = m.group(1);
-		byte[] hexMap = Base64.getDecoder().decode(b64);
-		//System.out.println("Hex map length: " + hexMap.length);
-
-		URL url2 = new URL(baseUrl + sizeUrlExtension);
-		String response2 = getContentFromURL(url2);
-
-		Pattern px = Pattern.compile(".*\"x\":([0-9]+).*");
-		Pattern pz = Pattern.compile(".*\"z\":([0-9]+).*");
-		Matcher mx = px.matcher(response2);
-		Matcher mz = pz.matcher(response2);
-		boolean bx = mx.matches();
-		boolean bz = mz.matches();
-		fullMapSizeX = Integer.parseInt(mx.group(1));
-		fullMapSizeZ = Integer.parseInt(mz.group(1));
-		mapSizeX = (int) fullMapSizeX/5;
-		mapSizeZ = (int) fullMapSizeZ/5;
-
 
 		boolean[][] binMap = new boolean[mapSizeX][mapSizeZ];
 		for (int z = 0; z < mapSizeZ; z++) {
 			for (int x = 0; x < mapSizeX; x++) {
-				int hexValue = (((int) hexMap[x + z*mapSizeX]) + 256) % 256;
-
-				//System.out.print(hexValue + " ");
-				for (int i = 0; i < wantedDistricts.length; i++) {
-					if (wantedDistricts[i] % 256 == hexValue) {
+				binMap[z][x] = false;
+				for (boolean[][] binMapTmp : binMaps) {
+					if (binMapTmp[z][x] == true) {
 						binMap[z][x] = true;
-						break;
-						//System.out.print("1");
-					} else {
-						binMap[z][x] = false;
-						//System.out.print("0");
 					}
 				}
 			}
-			//System.out.println();
 		}
 
-		//System.out.println("Bin map length: " + binMap.length);
-		//System.out.println("Bin map 0 length: " + binMap[0].length);
-
+		// Create a list of rectangles, representing the roads on the map
 		List<Rect> rectMap = buildRectMap(binMap);
 
 		if (rectMap.size() == 0) {
@@ -103,6 +129,7 @@ public class MapInterpreter {
 		List<Rect> oldRectMap = rectMap;
 		List<Rect> newRectMap = new ArrayList<>();
 
+		// Merge rectangles that are cut off by the edge of the map
 		boolean edgeMergeHappened = true;
 		while (edgeMergeHappened) {
 			newRectMap = edgeMergeRects(oldRectMap);
@@ -112,6 +139,7 @@ public class MapInterpreter {
 
 		//drawRectMap(newRectMap);
 
+		// Split rectangles, so that two adjacent rectangles have the same width or height
 		int splitCount = 0;
 		boolean splitHappened = true;
 		while (splitHappened) {
@@ -150,6 +178,7 @@ public class MapInterpreter {
 
 		//drawRectMap(newRectMap);
 
+		// Split long rects into 6 long rects
 		boolean longSplitHappened = true;
 		while (longSplitHappened) {
 			newRectMap = longSplitRects(oldRectMap);
@@ -188,6 +217,7 @@ public class MapInterpreter {
 		//System.out.println("Slim roads: " + slimRoadCount);
 		//System.out.println("Paths: " + pathCount);
 
+		// Turn rects into paths
 		List<Coord> coords = getTurningCoords(newRectMap);
 		Map<Coord, List<Coord>> paths = getTurningPaths(newRectMap, coords);
 
@@ -416,6 +446,7 @@ public class MapInterpreter {
 		return new ArrayList<>(coords);
 	}
 
+	// Merge rectangles, that are cut off by the edge of the map
 	private List<Rect> edgeMergeRects(List<Rect> oldRectMap) {
 		List<Rect> newRectMap = new ArrayList<>(oldRectMap);
 		for (Rect rect1 : oldRectMap) {
@@ -457,12 +488,9 @@ public class MapInterpreter {
 		return newRectMap;
 	}
 
+	// Long rects are split into 6 long rects
 	private List<Rect> longSplitRects(List<Rect> oldRectMap) {
 		List<Rect> newRectMap = new ArrayList<>(oldRectMap);
-		// For every rect, check if another rect is adjecent to the north or south
-		// If there is, split both rects along the others x-coords and continue the while-loop
-		// For every rect, check if another rect is adjecent to the east or west
-		// If there is, split both rects along the others y-coords and continue the while-loop
 		for (Rect rect1 : oldRectMap) {
 			if (rect1.max_x - rect1.min_x >= 9) {
 				newRectMap.remove(rect1);
